@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from mem0.memory.utils import format_entities, sanitize_relationship_for_cypher
 
@@ -171,8 +172,13 @@ class MemoryGraph:
             params["run_id"] = filters["run_id"]
         node_props_str = ", ".join(node_props)
 
+        start_timestamp, end_timestamp = self._get_filter_timestamp_range(filters=filters)
+        params["start_timestamp"] = start_timestamp
+        params["end_timestamp"] = end_timestamp
+
         query = f"""
         MATCH (n {self.node_label} {{{node_props_str}}})-[r]->(m {self.node_label} {{{node_props_str}}})
+        WHERE r.timestamp >= $start_timestamp AND r.timestamp <= $end_timestamp AND n.name <> m.name
         RETURN n.name AS source, type(r) AS relationship, m.name AS target
         LIMIT $limit
         """
@@ -264,6 +270,7 @@ class MemoryGraph:
             entities = extracted_entities["tool_calls"][0].get("arguments", {}).get("entities", [])
 
         entities = self._remove_spaces_from_entities(entities)
+        entities = self._remove_invalid_relations(entities)
         logger.debug(f"Extracted entities: {entities}")
         return entities
 
@@ -279,6 +286,8 @@ class MemoryGraph:
             node_props.append("run_id: $run_id")
         node_props_str = ", ".join(node_props)
 
+        start_timestamp, end_timestamp = self._get_filter_timestamp_range(filters=filters)
+
         for node in node_list:
             n_embedding = self.embedding_model.embed(node)
 
@@ -290,13 +299,16 @@ class MemoryGraph:
             CALL {{
                 WITH n
                 MATCH (n)-[r]->(m {self.node_label} {{{node_props_str}}})
+                WHERE r.timestamp >= $start_timestamp AND r.timestamp <= $end_timestamp
                 RETURN n.name AS source, elementId(n) AS source_id, type(r) AS relationship, elementId(r) AS relation_id, m.name AS destination, elementId(m) AS destination_id
                 UNION
                 WITH n  
                 MATCH (n)<-[r]-(m {self.node_label} {{{node_props_str}}})
+                WHERE r.timestamp >= $start_timestamp AND r.timestamp <= $end_timestamp
                 RETURN m.name AS source, elementId(m) AS source_id, type(r) AS relationship, elementId(r) AS relation_id, n.name AS destination, elementId(n) AS destination_id
             }}
             WITH distinct source, source_id, relationship, relation_id, destination, destination_id, similarity
+            WHERE source <> destination
             RETURN source, source_id, relationship, relation_id, destination, destination_id, similarity
             ORDER BY similarity DESC
             LIMIT $limit
@@ -307,6 +319,8 @@ class MemoryGraph:
                 "threshold": self.threshold,
                 "user_id": filters["user_id"],
                 "limit": limit,
+                "start_timestamp": start_timestamp,
+                "end_timestamp": end_timestamp,
             }
             if filters.get("agent_id"):
                 params["agent_id"] = filters["agent_id"]
@@ -396,7 +410,7 @@ class MemoryGraph:
             MATCH (n {self.node_label} {{{source_props_str}}})
             -[r:{relationship}]->
             (m {self.node_label} {{{dest_props_str}}})
-            
+
             DELETE r
             RETURN 
                 n.name AS source,
@@ -414,6 +428,7 @@ class MemoryGraph:
         user_id = filters["user_id"]
         agent_id = filters.get("agent_id", None)
         run_id = filters.get("run_id", None)
+        timestamp = filters.get("timestamp", datetime.now())
         results = []
         for item in to_be_added:
             # entities
@@ -455,6 +470,7 @@ class MemoryGraph:
                 MERGE (destination {destination_label} {{{merge_props_str}}})
                 ON CREATE SET
                     destination.created = timestamp(),
+                    destination.timestamp = {timestamp},
                     destination.mentions = 1
                     {destination_extra_set}
                 ON MATCH SET
@@ -465,6 +481,7 @@ class MemoryGraph:
                 MERGE (source)-[r:{relationship}]->(destination)
                 ON CREATE SET 
                     r.created = timestamp(),
+                    r.timestamp = {timestamp},
                     r.mentions = 1
                 ON MATCH SET
                     r.mentions = coalesce(r.mentions, 0) + 1
@@ -499,6 +516,7 @@ class MemoryGraph:
                 MERGE (source {source_label} {{{merge_props_str}}})
                 ON CREATE SET
                     source.created = timestamp(),
+                    source.timestamp = {timestamp},
                     source.mentions = 1
                     {source_extra_set}
                 ON MATCH SET
@@ -509,6 +527,7 @@ class MemoryGraph:
                 MERGE (source)-[r:{relationship}]->(destination)
                 ON CREATE SET 
                     r.created = timestamp(),
+                    r.timestamp = {timestamp},
                     r.mentions = 1
                 ON MATCH SET
                     r.mentions = coalesce(r.mentions, 0) + 1
@@ -539,6 +558,7 @@ class MemoryGraph:
                 ON CREATE SET 
                     r.created_at = timestamp(),
                     r.updated_at = timestamp(),
+                    r.timestamp = {timestamp},
                     r.mentions = 1
                 ON MATCH SET r.mentions = coalesce(r.mentions, 0) + 1
                 RETURN source.name AS source, type(r) AS relationship, destination.name AS target
@@ -570,6 +590,7 @@ class MemoryGraph:
                 cypher = f"""
                 MERGE (source {source_label} {{{source_props_str}}})
                 ON CREATE SET source.created = timestamp(),
+                            source.timestamp = {timestamp},
                             source.mentions = 1
                             {source_extra_set}
                 ON MATCH SET source.mentions = coalesce(source.mentions, 0) + 1
@@ -578,6 +599,7 @@ class MemoryGraph:
                 WITH source
                 MERGE (destination {destination_label} {{{dest_props_str}}})
                 ON CREATE SET destination.created = timestamp(),
+                            destination.timestamp = {timestamp},
                             destination.mentions = 1
                             {destination_extra_set}
                 ON MATCH SET destination.mentions = coalesce(destination.mentions, 0) + 1
@@ -585,7 +607,7 @@ class MemoryGraph:
                 CALL db.create.setNodeVectorProperty(destination, 'embedding', $dest_embedding)
                 WITH source, destination
                 MERGE (source)-[rel:{relationship}]->(destination)
-                ON CREATE SET rel.created = timestamp(), rel.mentions = 1
+                ON CREATE SET rel.created = timestamp(), rel.timestamp = {timestamp}, rel.mentions = 1
                 ON MATCH SET rel.mentions = coalesce(rel.mentions, 0) + 1
                 RETURN source.name AS source, type(rel) AS relationship, destination.name AS target
                 """
@@ -609,9 +631,15 @@ class MemoryGraph:
         for item in entity_list:
             item["source"] = item["source"].lower().replace(" ", "_")
             # Use the sanitization function for relationships to handle special characters
-            item["relationship"] = sanitize_relationship_for_cypher(item["relationship"].lower().replace(" ", "_"))
+            item["relationship"] = sanitize_relationship_for_cypher(item["relationship"].lower().replace(" ", "_").replace("-", "_"))
             item["destination"] = item["destination"].lower().replace(" ", "_")
         return entity_list
+
+    def _remove_invalid_relations(self, entity_list):
+        return [
+            item for item in entity_list
+            if item.get("source", "") != item.get("destination", "") or item.get("relationship", "").isdigit()
+        ]
 
     def _search_source_node(self, source_embedding, filters, threshold=0.9):
         # Build WHERE conditions
@@ -687,6 +715,19 @@ class MemoryGraph:
 
         result = self.graph.query(cypher, params=params)
         return result
+
+    def _get_filter_timestamp_range(self, filters):
+        start_timestamp = 0
+        end_timestamp = datetime.max
+        time_filters = filters.get("time_filters")
+        if time_filters:
+            gte = time_filters.get("gte")
+            lte = time_filters.get("lte")
+            if gte:
+                start_timestamp = gte
+            if lte:
+                end_timestamp = lte
+        return start_timestamp, end_timestamp
 
     # Reset is not defined in base.py
     def reset(self):

@@ -52,7 +52,9 @@ Entity Consistency:
 
 Strive to construct a coherent and easily understandable knowledge graph by establishing all the relationships among the entities and adherence to the user’s context.
 
-Adhere strictly to these guidelines to ensure high-quality knowledge graph extraction."""
+Adhere strictly to these guidelines to ensure high-quality knowledge graph extraction.
+
+You should detect the language of the user input and extract the information in the same language."""
 
 DELETE_RELATIONS_SYSTEM_PROMPT = """
 You are a graph memory manager specializing in identifying, managing, and optimizing relationships within graph-based memories. Your primary task is to analyze a list of existing relationships and determine which ones should be deleted based on the new information provided.

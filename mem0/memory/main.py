@@ -247,6 +247,7 @@ class Memory(MemoryBase):
             agent_id=agent_id,
             run_id=run_id,
             input_metadata=metadata,
+            input_filters=metadata,
         )
 
         if memory_type is not None and memory_type != MemoryType.PROCEDURAL.value:
@@ -308,6 +309,8 @@ class Memory(MemoryBase):
         return {"results": vector_store_result}
 
     def _add_to_vector_store(self, messages, metadata, filters, infer):
+        return []
+
         if not infer:
             returned_memories = []
             for message_dict in messages:
