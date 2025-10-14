@@ -605,6 +605,43 @@ class Memory(MemoryBase):
         else:
             return {"results": all_memories_result}
 
+    def get_graph_all(
+        self,
+        *,
+        user_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: int = 100,
+    ):
+        """
+        List all graph memories.
+
+        Args:
+            user_id (str, optional): user id
+            agent_id (str, optional): agent id
+            run_id (str, optional): run id
+            filters (dict, optional): Additional custom key-value filters to apply to the search.
+                These are merged with the ID-based scoping filters. For example,
+                `filters={"actor_id": "some_user"}`.
+            limit (int, optional): The maximum number of memories to return. Defaults to 100.
+
+        Returns:
+            dict: A dictionary containing "nodes" and "relations" key,
+        """
+        if not self.enable_graph:
+            return None
+
+        _, effective_filters = _build_filters_and_metadata(
+            user_id=user_id, agent_id=agent_id, run_id=run_id, input_filters=filters
+        )
+
+        if not any(key in effective_filters for key in ("user_id", "agent_id", "run_id")):
+            raise ValueError("At least one of 'user_id', 'agent_id', or 'run_id' must be specified.")
+
+        results = self.graph.get_all_nodes_relationships(filters=effective_filters, limit=limit)
+        return results
+
     def _get_all_from_vector_store(self, filters, limit):
         memories_result = self.vector_store.list(filters=filters, limit=limit)
         actual_memories = (

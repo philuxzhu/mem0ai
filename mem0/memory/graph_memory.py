@@ -198,6 +198,66 @@ class MemoryGraph:
 
         return final_results
 
+    def get_all_nodes_relationships(self, filters, limit=100):
+        """
+        Retrieves all nodes and relationships from the graph database based on optional filtering criteria.
+        Args:
+            filters (dict): A dictionary containing filters to be applied during the retrieval.
+            limit (int): The maximum number of nodes and relationships to retrieve. Defaults to 100.
+        Returns:
+            dict: A dictionary with key nodes and relations.
+        """
+        params = {"user_id": filters["user_id"], "limit": limit}
+
+        # Build node properties based on filters
+        node_props = ["user_id: $user_id"]
+        if filters.get("agent_id"):
+            node_props.append("agent_id: $agent_id")
+            params["agent_id"] = filters["agent_id"]
+        if filters.get("run_id"):
+            node_props.append("run_id: $run_id")
+            params["run_id"] = filters["run_id"]
+        node_props_str = ", ".join(node_props)
+
+        start_timestamp, end_timestamp = self._get_filter_timestamp_range(filters=filters)
+        params["start_timestamp"] = start_timestamp
+        params["end_timestamp"] = end_timestamp
+
+        query = f"""
+        MATCH (n {self.node_label} {{{node_props_str}}})-[r]->(m {self.node_label} {{{node_props_str}}})
+        WHERE r.timestamp >= $start_timestamp AND r.timestamp <= $end_timestamp AND n.name <> m.name
+        WITH collect(distinct n) + collect(distinct m) AS nodes, collect(r) AS rels
+        UNWIND nodes AS node
+        WITH node, rels
+        ORDER BY node.name
+        WITH collect({{
+            id: toString(id(node)),
+            name: node.name,
+            labels: labels(node),
+            properties: properties(node)
+        }}) AS nodes, rels
+        UNWIND rels AS r
+        WITH nodes, r
+        WITH nodes, collect({{
+            id: toString(id(r)),
+            type: type(r),
+            startNode: toString(id(startNode(r))),
+            endNode: toString(id(endNode(r))),
+            properties: properties(r)
+        }}) AS relationships
+        RETURN nodes, relationships
+        LIMIT $limit
+        """
+        results = self.graph.query(query, params=params)
+        if not results:
+            logger.info(f"results is None")
+            return None
+
+        # remove embedding property
+        for node in results[0]['nodes']:
+            node['properties'].pop('embedding', None)
+        return results[0]
+
     def _retrieve_nodes_from_data(self, data, filters):
         """Extracts all the entities mentioned in the query."""
         _tools = [EXTRACT_ENTITIES_TOOL]
