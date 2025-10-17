@@ -329,6 +329,7 @@ class MemoryGraph:
         if extracted_entities.get("tool_calls"):
             entities = extracted_entities["tool_calls"][0].get("arguments", {}).get("entities", [])
 
+        entities = self._remove_invalid_source_entities(entities, user_identity)
         entities = self._remove_spaces_from_entities(entities)
         entities = self._remove_invalid_relations(entities)
         logger.debug(f"Extracted entities: {entities}")
@@ -699,6 +700,12 @@ class MemoryGraph:
         return [
             item for item in entity_list
             if item.get("source", "") != item.get("destination", "") or item.get("relationship", "").isdigit()
+        ]
+
+    def _remove_invalid_source_entities(self, entity_list, user_identity):
+        return [
+            item for item in entity_list
+            if item.get("source", "") == user_identity
         ]
 
     def _search_source_node(self, source_embedding, filters, threshold=0.9):

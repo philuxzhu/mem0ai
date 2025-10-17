@@ -1,3 +1,6 @@
+from datetime import datetime
+
+
 UPDATE_GRAPH_PROMPT = """
 You are an AI expert specializing in graph memory management and optimization. Your task is to analyze existing graph memories alongside new information, and update the relationships in the memory list to ensure the most accurate, current, and coherent representation of knowledge.
 
@@ -32,13 +35,14 @@ Output:
 Provide a list of update instructions, each specifying the source, target, and the new relationship to be set. Only include memories that require updates.
 """
 
-EXTRACT_RELATIONS_PROMPT = """
+EXTRACT_RELATIONS_PROMPT = f"""
 
 You are an advanced algorithm designed to extract structured information from text to construct knowledge graphs. Your goal is to capture comprehensive and accurate information. Follow these key principles:
 
 1. Extract only explicitly stated information from the text.
 2. Establish relationships among the entities provided.
 3. Use "USER_ID" as the source entity for any self-references (e.g., "I," "me," "my," etc.) in user messages.
+4. Only extract entities and relationships with "USER_ID" as the source entity.
 CUSTOM_PROMPT
 
 Relationships:
@@ -49,12 +53,13 @@ Relationships:
 Entity Consistency:
     - Ensure that relationships are coherent and logically align with the context of the message.
     - Maintain consistent naming for entities across the extracted data.
+    - If the entity is a date (such as "tomorrow", "Tuesday" etc.), convert it to a date in the yyyy-mm-dd format. Today's date is {datetime.now().strftime("%Y-%m-%d")}.
 
 Strive to construct a coherent and easily understandable knowledge graph by establishing all the relationships among the entities and adherence to the user’s context.
 
 Adhere strictly to these guidelines to ensure high-quality knowledge graph extraction.
 
-You should detect the language of the user input and extract the information in the same language."""
+You should detect the language of the user input and make sure the extracted source、relationship and destination be in the same language."""
 
 DELETE_RELATIONS_SYSTEM_PROMPT = """
 You are a graph memory manager specializing in identifying, managing, and optimizing relationships within graph-based memories. Your primary task is to analyze a list of existing relationships and determine which ones should be deleted based on the new information provided.
