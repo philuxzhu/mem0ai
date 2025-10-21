@@ -332,7 +332,7 @@ class MemoryGraph:
         entities = self._remove_invalid_source_entities(entities, user_identity)
         entities = self._remove_spaces_from_entities(entities)
         entities = self._remove_invalid_relations(entities)
-        logger.debug(f"Extracted entities: {entities}")
+        logger.info(f"Extracted entities: {entities}")
         return entities
 
     def _search_graph_db(self, node_list, filters, limit=100):
