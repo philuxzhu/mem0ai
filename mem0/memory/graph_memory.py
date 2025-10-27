@@ -207,10 +207,10 @@ class MemoryGraph:
         Returns:
             dict: A dictionary with key nodes and relations.
         """
-        params = {"user_id": filters["user_id"], "limit": limit}
+        params = {"limit": limit}
 
         # Build node properties based on filters
-        node_props = ["user_id: $user_id"]
+        node_props = []
         if filters.get("agent_id"):
             node_props.append("agent_id: $agent_id")
             params["agent_id"] = filters["agent_id"]
@@ -225,7 +225,7 @@ class MemoryGraph:
 
         query = f"""
         MATCH (n {self.node_label} {{{node_props_str}}})-[r]->(m {self.node_label} {{{node_props_str}}})
-        WHERE r.timestamp >= $start_timestamp AND r.timestamp <= $end_timestamp AND n.name <> m.name
+        WHERE r.start_timestamp >= $start_timestamp AND r.end_timestamp <= $end_timestamp AND n.name <> m.name
         WITH collect(distinct n) + collect(distinct m) AS nodes, collect(r) AS rels
         UNWIND nodes AS node
         WITH node, rels
