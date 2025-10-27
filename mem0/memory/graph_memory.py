@@ -21,7 +21,7 @@ from mem0.graphs.tools import (
     RELATIONS_STRUCT_TOOL,
     RELATIONS_TOOL,
 )
-from mem0.graphs.utils import EXTRACT_NODES_PROMPT, EXTRACT_RELATIONS_PROMPT, get_delete_messages
+from mem0.graphs.utils import EXTRACT_RELATIONS_PROMPT, get_delete_messages
 from mem0.utils.factory import EmbedderFactory, LlmFactory
 
 logger = logging.getLogger(__name__)
@@ -267,7 +267,7 @@ class MemoryGraph:
             messages=[
                 {
                     "role": "system",
-                    "content": EXTRACT_NODES_PROMPT,
+                    "content": f"You are a smart assistant who understands entities and their types in a given text. If user message contains self reference such as 'I', 'me', 'my' etc. then use {filters['user_id']} as the source entity. Extract all the entities from the text. ***DO NOT*** answer the question itself if the given text is a question.",
                 },
                 {"role": "user", "content": data},
             ],
@@ -329,8 +329,9 @@ class MemoryGraph:
         if extracted_entities.get("tool_calls"):
             entities = extracted_entities["tool_calls"][0].get("arguments", {}).get("entities", [])
 
+        entities = self._remove_invalid_source_entities(entities, user_identity)
         entities = self._remove_spaces_from_entities(entities)
-        entities = self._remove_invalid_relations(entities, filters)
+        entities = self._remove_invalid_relations(entities)
         logger.info(f"Extracted entities: {entities}")
         return entities
 
@@ -489,10 +490,6 @@ class MemoryGraph:
         agent_id = filters.get("agent_id", None)
         run_id = filters.get("run_id", None)
         timestamp = filters.get("timestamp", datetime.now())
-        content = filters.get("content", "")
-        start_timestamp = filters.get("start_timestamp", datetime.now())
-        end_timestamp = filters.get("end_timestamp", datetime.now())
-        users = filters.get("users", {})
         results = []
         for item in to_be_added:
             # entities
@@ -501,11 +498,9 @@ class MemoryGraph:
             relationship = item["relationship"]
 
             # types
-            source_user_id = users.get(source, "")
             source_type = entity_type_map.get(source, "__User__")
             source_label = self.node_label if self.node_label else f":`{source_type}`"
             source_extra_set = f", source:`{source_type}`" if self.node_label else ""
-            destination_user_id = users.get(destination, "")
             destination_type = entity_type_map.get(destination, "__User__")
             destination_label = self.node_label if self.node_label else f":`{destination_type}`"
             destination_extra_set = f", destination:`{destination_type}`" if self.node_label else ""
@@ -536,7 +531,7 @@ class MemoryGraph:
                 MERGE (destination {destination_label} {{{merge_props_str}}})
                 ON CREATE SET
                     destination.created = timestamp(),
-                    destination.w_user_id = $destination_user_id,
+                    destination.timestamp = {timestamp},
                     destination.mentions = 1
                     {destination_extra_set}
                 ON MATCH SET
@@ -547,9 +542,7 @@ class MemoryGraph:
                 MERGE (source)-[r:{relationship}]->(destination)
                 ON CREATE SET 
                     r.created = timestamp(),
-                    r.content = $content,
-                    r.start_timestamp = $start_timestamp,
-                    r.end_timestamp = $end_timestamp,
+                    r.timestamp = {timestamp},
                     r.mentions = 1
                 ON MATCH SET
                     r.mentions = coalesce(r.mentions, 0) + 1
@@ -560,11 +553,7 @@ class MemoryGraph:
                     "source_id": source_node_search_result[0]["elementId(source_candidate)"],
                     "destination_name": destination,
                     "destination_embedding": dest_embedding,
-                    "destination_user_id": destination_user_id,
                     "user_id": user_id,
-                    "content": content,
-                    "start_timestamp": start_timestamp,
-                    "end_timestamp": end_timestamp,
                 }
                 if agent_id:
                     params["agent_id"] = agent_id
@@ -588,7 +577,7 @@ class MemoryGraph:
                 MERGE (source {source_label} {{{merge_props_str}}})
                 ON CREATE SET
                     source.created = timestamp(),
-                    source.w_user_id = $source_user_id,
+                    source.timestamp = {timestamp},
                     source.mentions = 1
                     {source_extra_set}
                 ON MATCH SET
@@ -599,9 +588,7 @@ class MemoryGraph:
                 MERGE (source)-[r:{relationship}]->(destination)
                 ON CREATE SET 
                     r.created = timestamp(),
-                    r.content = $content,
-                    r.start_timestamp = $start_timestamp,
-                    r.end_timestamp = $end_timestamp,
+                    r.timestamp = {timestamp},
                     r.mentions = 1
                 ON MATCH SET
                     r.mentions = coalesce(r.mentions, 0) + 1
@@ -612,11 +599,7 @@ class MemoryGraph:
                     "destination_id": destination_node_search_result[0]["elementId(destination_candidate)"],
                     "source_name": source,
                     "source_embedding": source_embedding,
-                    "source_user_id": source_user_id,
                     "user_id": user_id,
-                    "content": content,
-                    "start_timestamp": start_timestamp,
-                    "end_timestamp": end_timestamp,
                 }
                 if agent_id:
                     params["agent_id"] = agent_id
@@ -636,9 +619,7 @@ class MemoryGraph:
                 ON CREATE SET 
                     r.created_at = timestamp(),
                     r.updated_at = timestamp(),
-                    r.content = $content,
-                    r.start_timestamp = $start_timestamp,
-                    r.end_timestamp = $end_timestamp,
+                    r.timestamp = {timestamp},
                     r.mentions = 1
                 ON MATCH SET r.mentions = coalesce(r.mentions, 0) + 1
                 RETURN source.name AS source, type(r) AS relationship, destination.name AS target
@@ -648,9 +629,6 @@ class MemoryGraph:
                     "source_id": source_node_search_result[0]["elementId(source_candidate)"],
                     "destination_id": destination_node_search_result[0]["elementId(destination_candidate)"],
                     "user_id": user_id,
-                    "content": content,
-                    "start_timestamp": start_timestamp,
-                    "end_timestamp": end_timestamp,
                 }
                 if agent_id:
                     params["agent_id"] = agent_id
@@ -673,7 +651,7 @@ class MemoryGraph:
                 cypher = f"""
                 MERGE (source {source_label} {{{source_props_str}}})
                 ON CREATE SET source.created = timestamp(),
-                            source.w_user_id = $source_user_id,
+                            source.timestamp = {timestamp},
                             source.mentions = 1
                             {source_extra_set}
                 ON MATCH SET source.mentions = coalesce(source.mentions, 0) + 1
@@ -682,7 +660,7 @@ class MemoryGraph:
                 WITH source
                 MERGE (destination {destination_label} {{{dest_props_str}}})
                 ON CREATE SET destination.created = timestamp(),
-                            destination.w_user_id = $destination_user_id,
+                            destination.timestamp = {timestamp},
                             destination.mentions = 1
                             {destination_extra_set}
                 ON MATCH SET destination.mentions = coalesce(destination.mentions, 0) + 1
@@ -690,27 +668,17 @@ class MemoryGraph:
                 CALL db.create.setNodeVectorProperty(destination, 'embedding', $dest_embedding)
                 WITH source, destination
                 MERGE (source)-[rel:{relationship}]->(destination)
-                ON CREATE SET
-                    rel.created = timestamp(),
-                    rel.content = $content,
-                    rel.start_timestamp = $start_timestamp,
-                    rel.end_timestamp = $end_timestamp,
-                    rel.mentions = 1
+                ON CREATE SET rel.created = timestamp(), rel.timestamp = {timestamp}, rel.mentions = 1
                 ON MATCH SET rel.mentions = coalesce(rel.mentions, 0) + 1
                 RETURN source.name AS source, type(rel) AS relationship, destination.name AS target
                 """
 
                 params = {
                     "source_name": source,
-                    "source_user_id": source_user_id,
                     "dest_name": destination,
-                    "destination_user_id": destination_user_id,
                     "source_embedding": source_embedding,
                     "dest_embedding": dest_embedding,
                     "user_id": user_id,
-                    "content": content,
-                    "start_timestamp": start_timestamp,
-                    "end_timestamp": end_timestamp,
                 }
                 if agent_id:
                     params["agent_id"] = agent_id
@@ -728,23 +696,11 @@ class MemoryGraph:
             item["destination"] = item["destination"].lower().replace(" ", "_")
         return entity_list
 
-    def _remove_invalid_relations(self, entity_list, filters):
-        valid_relations = []
-        users = filters.get("users", {})
-        for item in entity_list:
-            source = item.get("source", "")
-            # remove the relations that source equals destination or relationship that first character is digit
-            if source == item.get("destination", "") or item.get("relationship", "")[0].isdigit():
-                continue
-            # remove the relations that source is not the user or not exist before
-            if source not in users.keys():
-                dest_embedding = self.embedding_model.embed(source)
-                destination_node_search_result = self._search_destination_node(dest_embedding, filters, threshold=0.9)
-                if not destination_node_search_result:
-                    continue
-            valid_relations.append(item)
-
-        return valid_relations
+    def _remove_invalid_relations(self, entity_list):
+        return [
+            item for item in entity_list
+            if item.get("source", "") != item.get("destination", "") or item.get("relationship", "").isdigit()
+        ]
 
     def _remove_invalid_source_entities(self, entity_list, user_identity):
         return [
