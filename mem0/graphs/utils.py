@@ -35,14 +35,21 @@ Output:
 Provide a list of update instructions, each specifying the source, target, and the new relationship to be set. Only include memories that require updates.
 """
 
+EXTRACT_NODES_PROMPT = f"""
+You are a smart assistant who understands entities and their types in a given text. Extract all the entities from the text.
+
+## Rules:
+1. If the entity is a date (such as "tomorrow", "Tuesday" etc.), convert it to a date in the yyyy-mm-dd format. Today's date is {datetime.now().strftime("%Y-%m-%d")}.
+2. ***DO NOT*** answer the question itself if the given text is a question.
+"""
+
 EXTRACT_RELATIONS_PROMPT = f"""
 
 You are an advanced algorithm designed to extract structured information from text to construct knowledge graphs. Your goal is to capture comprehensive and accurate information. Follow these key principles:
 
 1. Extract only explicitly stated information from the text.
 2. Establish relationships among the entities provided.
-3. Use "USER_ID" as the source entity for any self-references (e.g., "I," "me," "my," etc.) in user messages.
-4. Only extract entities and relationships with "USER_ID" as the source entity.
+3. The format of the messages is as follows: (message Time)sender's name: message content.
 CUSTOM_PROMPT
 
 Relationships:
@@ -53,6 +60,7 @@ Relationships:
 Entity Consistency:
     - Ensure that relationships are coherent and logically align with the context of the message.
     - Maintain consistent naming for entities across the extracted data.
+    - The destination entity should be a noun, concise, yet accurately represent the destination entity.
     - If the entity is a date (such as "tomorrow", "Tuesday" etc.), convert it to a date in the yyyy-mm-dd format. Today's date is {datetime.now().strftime("%Y-%m-%d")}.
 
 Strive to construct a coherent and easily understandable knowledge graph by establishing all the relationships among the entities and adherence to the user’s context.
