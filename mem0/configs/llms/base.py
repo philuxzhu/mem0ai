@@ -17,6 +17,7 @@ class BaseLlmConfig(ABC):
         self,
         model: Optional[Union[str, Dict]] = None,
         temperature: float = 0.1,
+        reasoning_effort: Optional[str] = None,
         api_key: Optional[str] = None,
         max_tokens: int = 2000,
         top_p: float = 0.1,
@@ -53,6 +54,7 @@ class BaseLlmConfig(ABC):
         """
         self.model = model
         self.temperature = temperature
+        self.reasoning_effort = reasoning_effort
         self.api_key = api_key
         self.max_tokens = max_tokens
         self.top_p = top_p

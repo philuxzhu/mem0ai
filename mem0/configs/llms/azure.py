@@ -15,6 +15,7 @@ class AzureOpenAIConfig(BaseLlmConfig):
         # Base parameters
         model: Optional[str] = None,
         temperature: float = 0.1,
+        reasoning_effort: Optional[str] = None,
         api_key: Optional[str] = None,
         max_tokens: int = 2000,
         top_p: float = 0.1,
@@ -44,6 +45,7 @@ class AzureOpenAIConfig(BaseLlmConfig):
         super().__init__(
             model=model,
             temperature=temperature,
+            reasoning_effort=reasoning_effort,
             api_key=api_key,
             max_tokens=max_tokens,
             top_p=top_p,
