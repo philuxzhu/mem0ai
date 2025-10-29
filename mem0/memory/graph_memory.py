@@ -501,11 +501,11 @@ class MemoryGraph:
             relationship = item["relationship"]
 
             # types
-            source_user_id = users.get(source, "")
+            source_user_id = self._get_w_user_id_by_name(source, filters)
             source_type = entity_type_map.get(source, "__User__")
             source_label = self.node_label if self.node_label else f":`{source_type}`"
             source_extra_set = f", source:`{source_type}`" if self.node_label else ""
-            destination_user_id = users.get(destination, "")
+            destination_user_id = self._get_w_user_id_by_name(destination, filters)
             destination_type = entity_type_map.get(destination, "__User__")
             destination_label = self.node_label if self.node_label else f":`{destination_type}`"
             destination_extra_set = f", destination:`{destination_type}`" if self.node_label else ""
@@ -515,8 +515,8 @@ class MemoryGraph:
             dest_embedding = self.embedding_model.embed(destination)
 
             # search for the nodes with the closest embeddings
-            source_node_search_result = self._search_source_node(source_embedding, filters, threshold=0.9)
-            destination_node_search_result = self._search_destination_node(dest_embedding, filters, threshold=0.9)
+            source_node_search_result = self._get_source_node(source_user_id, source_embedding, filters, threshold=0.9)
+            destination_node_search_result = self._get_destination_node(destination_user_id, dest_embedding, filters, threshold=0.9)
 
             # TODO: Create a cypher query and common params for all the cases
             if not destination_node_search_result and source_node_search_result:
@@ -746,11 +746,99 @@ class MemoryGraph:
 
         return valid_relations
 
-    def _remove_invalid_source_entities(self, entity_list, user_identity):
-        return [
-            item for item in entity_list
-            if item.get("source", "") == user_identity
-        ]
+    def _get_w_user_id_by_name(self, name, filters):
+        users = filters.get("users", {})
+        for key in users.keys():
+            if name in key:
+                return users.get(key)
+        return ""
+
+    def _get_source_node(self, w_user_id, source_embedding, filters, threshold=0.9):
+        if w_user_id:
+            source_node_result = self._search_source_node_by_w_user_id(w_user_id, filters)
+            if source_node_result:
+                return source_node_result
+            # search for the nodes with the closest embeddings
+            source_node_result = self._search_source_node(source_embedding, filters, threshold)
+            return source_node_result
+        else:
+            # search for the nodes with the closest embeddings
+            source_node_result = self._search_source_node(source_embedding, filters, threshold)
+            return source_node_result
+
+    def _get_destination_node(self, w_user_id, destination_embedding, filters, threshold=0.9):
+        if w_user_id:
+            destination_node_result = self._search_destination_node_by_w_user_id(w_user_id, filters)
+            if destination_node_result:
+                return destination_node_result
+            # search for the nodes with the closest embeddings
+            destination_node_result = self._search_destination_node(destination_embedding, filters, threshold)
+            return destination_node_result
+        else:
+            # search for the nodes with the closest embeddings
+            destination_node_result = self._search_destination_node(destination_embedding, filters, threshold)
+            return destination_node_result
+
+    def _search_source_node_by_w_user_id(self, w_user_id, filters):
+        if not w_user_id:
+            return None
+
+        where_conditions = ["source_candidate.w_user_id = $w_user_id", "source_candidate.user_id = $user_id"]
+        if filters.get("agent_id"):
+            where_conditions.append("source_candidate.agent_id = $agent_id")
+        if filters.get("run_id"):
+            where_conditions.append("source_candidate.run_id = $run_id")
+        where_clause = " AND ".join(where_conditions)
+
+        cypher = f"""
+            MATCH (source_candidate {self.node_label})
+            WHERE {where_clause}
+
+            RETURN elementId(source_candidate)
+            """
+
+        params = {
+            "user_id": filters["user_id"],
+            "w_user_id": w_user_id,
+        }
+        if filters.get("agent_id"):
+            params["agent_id"] = filters["agent_id"]
+        if filters.get("run_id"):
+            params["run_id"] = filters["run_id"]
+
+        result = self.graph.query(cypher, params=params)
+        return result
+
+    def _search_destination_node_by_w_user_id(self, w_user_id, filters):
+        if not w_user_id:
+            return None
+
+        where_conditions = ["destination_candidate.w_user_id = $w_user_id", "destination_candidate.user_id = $user_id"]
+        if filters.get("agent_id"):
+            where_conditions.append("destination_candidate.agent_id = $agent_id")
+        if filters.get("run_id"):
+            where_conditions.append("destination_candidate.run_id = $run_id")
+        where_clause = " AND ".join(where_conditions)
+
+        cypher = f"""
+            MATCH (destination_candidate {self.node_label})
+            WHERE {where_clause}
+
+            RETURN elementId(destination_candidate)
+            """
+
+        params = {
+            "user_id": filters["user_id"],
+            "w_user_id": w_user_id,
+        }
+        if filters.get("agent_id"):
+            params["agent_id"] = filters["agent_id"]
+        if filters.get("run_id"):
+            params["run_id"] = filters["run_id"]
+
+        result = self.graph.query(cypher, params=params)
+        return result
+
 
     def _search_source_node(self, source_embedding, filters, threshold=0.9):
         # Build WHERE conditions
