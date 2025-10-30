@@ -36,20 +36,7 @@ Provide a list of update instructions, each specifying the source, target, and t
 """
 
 EXTRACT_NODES_PROMPT = f"""
-You are a smart assistant who understands entities and their types in a given text. Extract all the entities from the text.
-
-## Rules:
-1. The extracted entities and their types include:
-   - User: The person in the current chat session.
-   - Preference: The user's expressed like, dislike, or preference for something.
-   - Location: The physical or virtual place where an activity occurs or an entity exists.
-   - Event: A time-bound activity, occurrence, or experience.
-   - Topic: The subject of conversation, interest, or field of knowledge.
-   - Object: A tangible item, tool, device, or property.
-   - Organization: A company, institution, group, or formal entity.
-   - Document: Information content in various forms.
-2. If the entity is a date (such as "tomorrow", "Tuesday" etc.), convert it to a date in the yyyy-mm-dd format. Today's date is {datetime.now().strftime("%Y-%m-%d")}.
-3. ***DO NOT*** answer the question itself if the given text is a question.
+You are a smart assistant who understands entities and their types in a given text. Extract all the entities from the text. ***DO NOT*** answer the question itself if the given text is a question.
 """
 
 EXTRACT_RELATIONS_PROMPT = f"""
@@ -69,15 +56,7 @@ Relationships:
 Entity Consistency:
     - Ensure that relationships are coherent and logically align with the context of the message.
     - Maintain consistent naming for entities across the extracted data.
-    - The extracted entities and their types include:
-     （1）User: The person in the current chat session.
-     （2）Preference: The user's expressed like, dislike, or preference for something.
-     （3）Location: The physical or virtual place where an activity occurs or an entity exists.
-     （4）Event: A time-bound activity, occurrence, or experience.
-     （5）Topic: The subject of conversation, interest, or field of knowledge.
-     （6）Object: A tangible item, tool, device, or property.
-     （7）Organization: A company, institution, group, or formal entity.
-     （8）Document: Information content in various forms.
+    - The extracted entities should be as concise as possible, within 5 characters (in Chinese) or 5 words (in English).
     - If the entity is a date (such as "tomorrow", "Tuesday" etc.), convert it to a date in the yyyy-mm-dd format. Today's date is {datetime.now().strftime("%Y-%m-%d")}.
 
 Strive to construct a coherent and easily understandable knowledge graph by establishing all the relationships among the entities and adherence to the user’s context.

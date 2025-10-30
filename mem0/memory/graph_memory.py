@@ -160,25 +160,32 @@ class MemoryGraph:
                 - 'contexts': The base data store response for each memory.
                 - 'entities': A list of strings representing the nodes and relationships
         """
-        params = {"user_id": filters["user_id"], "limit": limit}
+        params = {"limit": limit}
 
         # Build node properties based on filters
-        node_props = ["user_id: $user_id"]
+        source_node_props = []
+        destination_node_props = []
+        if filters.get("user_id"):
+            source_node_props.append("w_user_id: $w_user_id")
+            params["w_user_id"] = filters["user_id"]
         if filters.get("agent_id"):
-            node_props.append("agent_id: $agent_id")
+            source_node_props.append("agent_id: $agent_id")
+            destination_node_props.append("agent_id: $agent_id")
             params["agent_id"] = filters["agent_id"]
         if filters.get("run_id"):
-            node_props.append("run_id: $run_id")
+            source_node_props.append("run_id: $run_id")
+            destination_node_props.append("run_id: $run_id")
             params["run_id"] = filters["run_id"]
-        node_props_str = ", ".join(node_props)
+        source_node_props_str = ", ".join(source_node_props)
+        destination_node_props_str = ", ".join(destination_node_props)
 
         start_timestamp, end_timestamp = self._get_filter_timestamp_range(filters=filters)
         params["start_timestamp"] = start_timestamp
         params["end_timestamp"] = end_timestamp
 
         query = f"""
-        MATCH (n {self.node_label} {{{node_props_str}}})-[r]->(m {self.node_label} {{{node_props_str}}})
-        WHERE r.timestamp >= $start_timestamp AND r.timestamp <= $end_timestamp AND n.name <> m.name
+        MATCH (n {self.node_label} {{{source_node_props_str}}})-[r]->(m {self.node_label} {{{destination_node_props_str}}})
+        WHERE r.start_timestamp >= $start_timestamp AND r.end_timestamp <= $end_timestamp AND n.name <> m.name
         RETURN n.name AS source, type(r) AS relationship, m.name AS target
         LIMIT $limit
         """
@@ -197,6 +204,37 @@ class MemoryGraph:
         logger.info(f"Retrieved {len(final_results)} relationships")
 
         return final_results
+
+    def update_node_names(self, data, filters):
+        """
+        Batch update node names according to w_user_id.
+        Args:
+            data (dict): A dictionary containing name:w_user_id pairs
+            filters (dict): A dictionary containing filters to be applied during the retrieval.
+        """
+        # Build node properties based on filters
+        node_props = ["w_user_id: row.w_user_id"]
+        params = {}
+        if filters.get("agent_id"):
+            node_props.append("agent_id: $agent_id")
+            params["agent_id"] = filters["agent_id"]
+        if filters.get("run_id"):
+            node_props.append("run_id: $run_id")
+            params["run_id"] = filters["run_id"]
+        node_props_str = ", ".join(node_props)
+
+        cypher = f"""
+        UNWIND $data AS row
+        MATCH (n {self.node_label} {{{node_props_str}}})
+        WHERE n.name <> row.name
+        SET n.name = row.name
+        RETURN n
+        """
+
+        data_list = [{"w_user_id": v, "name": k} for k, v in data.items()]
+        params["data"] = data_list
+        result = self.graph.query(cypher, params=params)
+        return result
 
     def get_all_nodes_relationships(self, filters, limit=100):
         """
@@ -339,12 +377,18 @@ class MemoryGraph:
         result_relations = []
 
         # Build node properties for filtering
-        node_props = ["user_id: $user_id"]
+        source_node_props = []
+        destination_node_props = []
+        if filters.get("user_id"):
+            source_node_props.append("w_user_id: $w_user_id")
         if filters.get("agent_id"):
-            node_props.append("agent_id: $agent_id")
+            source_node_props.append("agent_id: $agent_id")
+            destination_node_props.append("agent_id: $agent_id")
         if filters.get("run_id"):
-            node_props.append("run_id: $run_id")
-        node_props_str = ", ".join(node_props)
+            source_node_props.append("run_id: $run_id")
+            destination_node_props.append("run_id: $run_id")
+        source_node_props_str = ", ".join(source_node_props)
+        destination_node_props_str = ", ".join(destination_node_props)
 
         start_timestamp, end_timestamp = self._get_filter_timestamp_range(filters=filters)
 
@@ -352,19 +396,19 @@ class MemoryGraph:
             n_embedding = self.embedding_model.embed(node)
 
             cypher_query = f"""
-            MATCH (n {self.node_label} {{{node_props_str}}})
+            MATCH (n {self.node_label} {{{source_node_props_str}}})
             WHERE n.embedding IS NOT NULL
             WITH n, round(2 * vector.similarity.cosine(n.embedding, $n_embedding) - 1, 4) AS similarity // denormalize for backward compatibility
             WHERE similarity >= $threshold
             CALL {{
                 WITH n
-                MATCH (n)-[r]->(m {self.node_label} {{{node_props_str}}})
-                WHERE r.timestamp >= $start_timestamp AND r.timestamp <= $end_timestamp
+                MATCH (n)-[r]->(m {self.node_label} {{{destination_node_props_str}}})
+                WHERE r.start_timestamp >= $start_timestamp AND r.end_timestamp <= $end_timestamp
                 RETURN n.name AS source, elementId(n) AS source_id, type(r) AS relationship, elementId(r) AS relation_id, m.name AS destination, elementId(m) AS destination_id
                 UNION
                 WITH n  
-                MATCH (n)<-[r]-(m {self.node_label} {{{node_props_str}}})
-                WHERE r.timestamp >= $start_timestamp AND r.timestamp <= $end_timestamp
+                MATCH (n)<-[r]-(m {self.node_label} {{{destination_node_props_str}}})
+                WHERE r.start_timestamp >= $start_timestamp AND r.end_timestamp <= $end_timestamp
                 RETURN m.name AS source, elementId(m) AS source_id, type(r) AS relationship, elementId(r) AS relation_id, n.name AS destination, elementId(n) AS destination_id
             }}
             WITH distinct source, source_id, relationship, relation_id, destination, destination_id, similarity
@@ -377,11 +421,12 @@ class MemoryGraph:
             params = {
                 "n_embedding": n_embedding,
                 "threshold": self.threshold,
-                "user_id": filters["user_id"],
                 "limit": limit,
                 "start_timestamp": start_timestamp,
                 "end_timestamp": end_timestamp,
             }
+            if filters.get("user_id"):
+                params["w_user_id"] = filters["user_id"]
             if filters.get("agent_id"):
                 params["agent_id"] = filters["agent_id"]
             if filters.get("run_id"):

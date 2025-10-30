@@ -605,6 +605,39 @@ class Memory(MemoryBase):
         else:
             return {"results": all_memories_result}
 
+    def update_graph_node_names(
+        self,
+        *,
+        data: dict,
+        user_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        Batch update node names according to w_user_id.
+        Args:
+            data (dict): A dictionary containing name:w_user_id pairs
+            user_id (str, optional): user id
+            agent_id (str, optional): agent id
+            run_id (str, optional): run id
+            filters (dict, optional): Additional custom key-value filters to apply to the search.
+                These are merged with the ID-based scoping filters. For example,
+                `filters={"actor_id": "some_user"}`.
+        """
+        if not self.enable_graph:
+            return None
+
+        _, effective_filters = _build_filters_and_metadata(
+            user_id=user_id, agent_id=agent_id, run_id=run_id, input_filters=filters
+        )
+
+        if not any(key in effective_filters for key in ("user_id", "agent_id", "run_id")):
+            raise ValueError("At least one of 'user_id', 'agent_id', or 'run_id' must be specified.")
+
+        results = self.graph.update_node_names(data, effective_filters)
+        return results
+
     def get_graph_all(
         self,
         *,
