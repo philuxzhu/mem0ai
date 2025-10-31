@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from dateutil.parser import parse
 
 from mem0.memory.utils import format_entities, sanitize_relationship_for_cypher
 
@@ -185,7 +186,7 @@ class MemoryGraph:
 
         query = f"""
         MATCH (n {self.node_label} {{{source_node_props_str}}})-[r]->(m {self.node_label} {{{destination_node_props_str}}})
-        WHERE r.start_timestamp >= $start_timestamp AND r.end_timestamp <= $end_timestamp AND n.name <> m.name
+        WHERE r.timestamp >= $start_timestamp AND r.timestamp <= $end_timestamp AND n.name <> m.name
         RETURN n.name AS source, type(r) AS relationship, m.name AS target
         LIMIT $limit
         """
@@ -263,7 +264,7 @@ class MemoryGraph:
 
         query = f"""
         MATCH (n {self.node_label} {{{node_props_str}}})-[r]->(m {self.node_label} {{{node_props_str}}})
-        WHERE r.start_timestamp >= $start_timestamp AND r.end_timestamp <= $end_timestamp AND n.name <> m.name
+        WHERE r.timestamp >= $start_timestamp AND r.timestamp <= $end_timestamp AND n.name <> m.name
         WITH collect(distinct n) + collect(distinct m) AS nodes, collect(r) AS rels
         UNWIND nodes AS node
         WITH node, rels
@@ -403,12 +404,12 @@ class MemoryGraph:
             CALL {{
                 WITH n
                 MATCH (n)-[r]->(m {self.node_label} {{{destination_node_props_str}}})
-                WHERE r.start_timestamp >= $start_timestamp AND r.end_timestamp <= $end_timestamp
+                WHERE r.timestamp >= $start_timestamp AND r.timestamp <= $end_timestamp
                 RETURN n.name AS source, elementId(n) AS source_id, type(r) AS relationship, elementId(r) AS relation_id, m.name AS destination, elementId(m) AS destination_id
                 UNION
                 WITH n  
                 MATCH (n)<-[r]-(m {self.node_label} {{{destination_node_props_str}}})
-                WHERE r.start_timestamp >= $start_timestamp AND r.end_timestamp <= $end_timestamp
+                WHERE r.timestamp >= $start_timestamp AND r.timestamp <= $end_timestamp
                 RETURN m.name AS source, elementId(m) AS source_id, type(r) AS relationship, elementId(r) AS relation_id, n.name AS destination, elementId(n) AS destination_id
             }}
             WITH distinct source, source_id, relationship, relation_id, destination, destination_id, similarity
@@ -535,8 +536,7 @@ class MemoryGraph:
         run_id = filters.get("run_id", None)
         timestamp = filters.get("timestamp", datetime.now())
         content = filters.get("content", "")
-        start_timestamp = filters.get("start_timestamp", datetime.now())
-        end_timestamp = filters.get("end_timestamp", datetime.now())
+        msg_ids = ",".join(filters.get("msg_ids", []))
         users = filters.get("users", {})
         results = []
         for item in to_be_added:
@@ -544,6 +544,11 @@ class MemoryGraph:
             source = item["source"]
             destination = item["destination"]
             relationship = item["relationship"]
+            time = item["time"]
+            timestamp = self._datetime_to_timestmap(time)
+            if timestamp <= 0:
+                logger.error(f"llm time to timestamp error: {time}")
+                continue
 
             # types
             source_user_id = self._get_w_user_id_by_name(source, filters)
@@ -593,8 +598,8 @@ class MemoryGraph:
                 ON CREATE SET 
                     r.created = timestamp(),
                     r.content = $content,
-                    r.start_timestamp = $start_timestamp,
-                    r.end_timestamp = $end_timestamp,
+                    r.msg_ids = $msg_ids,
+                    r.timestamp = $timestamp,
                     r.mentions = 1
                 ON MATCH SET
                     r.mentions = coalesce(r.mentions, 0) + 1
@@ -608,8 +613,8 @@ class MemoryGraph:
                     "destination_user_id": destination_user_id,
                     "user_id": user_id,
                     "content": content,
-                    "start_timestamp": start_timestamp,
-                    "end_timestamp": end_timestamp,
+                    "msg_ids": msg_ids,
+                    "timestamp": timestamp,
                 }
                 if agent_id:
                     params["agent_id"] = agent_id
@@ -645,8 +650,8 @@ class MemoryGraph:
                 ON CREATE SET 
                     r.created = timestamp(),
                     r.content = $content,
-                    r.start_timestamp = $start_timestamp,
-                    r.end_timestamp = $end_timestamp,
+                    r.msg_ids = $msg_ids,
+                    r.timestamp = $timestamp,
                     r.mentions = 1
                 ON MATCH SET
                     r.mentions = coalesce(r.mentions, 0) + 1
@@ -660,8 +665,8 @@ class MemoryGraph:
                     "source_user_id": source_user_id,
                     "user_id": user_id,
                     "content": content,
-                    "start_timestamp": start_timestamp,
-                    "end_timestamp": end_timestamp,
+                    "msg_ids": msg_ids,
+                    "timestamp": timestamp,
                 }
                 if agent_id:
                     params["agent_id"] = agent_id
@@ -682,8 +687,8 @@ class MemoryGraph:
                     r.created_at = timestamp(),
                     r.updated_at = timestamp(),
                     r.content = $content,
-                    r.start_timestamp = $start_timestamp,
-                    r.end_timestamp = $end_timestamp,
+                    r.msg_ids = $msg_ids,
+                    r.timestamp = $timestamp,
                     r.mentions = 1
                 ON MATCH SET r.mentions = coalesce(r.mentions, 0) + 1
                 RETURN source.name AS source, type(r) AS relationship, destination.name AS target
@@ -694,8 +699,8 @@ class MemoryGraph:
                     "destination_id": destination_node_search_result[0]["elementId(destination_candidate)"],
                     "user_id": user_id,
                     "content": content,
-                    "start_timestamp": start_timestamp,
-                    "end_timestamp": end_timestamp,
+                    "msg_ids": msg_ids,
+                    "timestamp": timestamp,
                 }
                 if agent_id:
                     params["agent_id"] = agent_id
@@ -738,8 +743,8 @@ class MemoryGraph:
                 ON CREATE SET
                     rel.created = timestamp(),
                     rel.content = $content,
-                    rel.start_timestamp = $start_timestamp,
-                    rel.end_timestamp = $end_timestamp,
+                    rel.msg_ids = $msg_ids,
+                    rel.timestamp = $timestamp,
                     rel.mentions = 1
                 ON MATCH SET rel.mentions = coalesce(rel.mentions, 0) + 1
                 RETURN source.name AS source, type(rel) AS relationship, destination.name AS target
@@ -754,8 +759,8 @@ class MemoryGraph:
                     "dest_embedding": dest_embedding,
                     "user_id": user_id,
                     "content": content,
-                    "start_timestamp": start_timestamp,
-                    "end_timestamp": end_timestamp,
+                    "msg_ids": msg_ids,
+                    "timestamp": timestamp,
                 }
                 if agent_id:
                     params["agent_id"] = agent_id
@@ -790,6 +795,15 @@ class MemoryGraph:
             valid_relations.append(item)
 
         return valid_relations
+
+    def _datetime_to_timestmap(self, time):
+        try:
+            dt = parse(time)
+            timestamp = dt.timestamp()
+            return timestamp
+        except Exception as e:
+            return 0
+
 
     def _get_w_user_id_by_name(self, name, filters):
         users = filters.get("users", {})

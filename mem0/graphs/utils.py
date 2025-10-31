@@ -59,6 +59,9 @@ Entity Consistency:
     - The extracted entities should be as concise as possible, within 5 characters (in Chinese) or 5 words (in English).
     - If the entity is a date (such as "tomorrow", "Tuesday" etc.), convert it to a date in the yyyy-mm-dd format. Today's date is {datetime.now().strftime("%Y-%m-%d")}.
 
+Relationship time:
+    - The time of relationship from message.
+
 Strive to construct a coherent and easily understandable knowledge graph by establishing all the relationships among the entities and adherence to the user’s context.
 
 Adhere strictly to these guidelines to ensure high-quality knowledge graph extraction.

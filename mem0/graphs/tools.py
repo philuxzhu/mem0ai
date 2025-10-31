@@ -95,20 +95,46 @@ RELATIONS_TOOL = {
                     "items": {
                         "type": "object",
                         "properties": {
-                            "source": {"type": "string", "description": "The source entity of the relationship."},
+                            "source": {
+                                "type": "string",
+                                "description": f"""The source entity of the relationship.The extracted entities and their types include:
+   - User: The person in the current chat session.
+   - Preference: The user's expressed like, dislike, or preference for something.
+   - Location: The physical or virtual place where an activity occurs or an entity exists.
+   - Event: A time-bound activity, occurrence, or experience.
+   - Topic: The subject of conversation, interest, or field of knowledge.
+   - Object: A tangible item, tool, device, or property.
+   - Organization: A company, institution, group, or formal entity.
+   - Document: Information content in various forms.
+                                """
+                            },
                             "relationship": {
                                 "type": "string",
                                 "description": "The relationship between the source and destination entities.",
                             },
                             "destination": {
                                 "type": "string",
-                                "description": "The destination entity of the relationship.",
+                                "description": f"""The destination entity of the relationship.The extracted entities and their types include:
+   - User: The person in the current chat session.
+   - Preference: The user's expressed like, dislike, or preference for something.
+   - Location: The physical or virtual place where an activity occurs or an entity exists.
+   - Event: A time-bound activity, occurrence, or experience.
+   - Topic: The subject of conversation, interest, or field of knowledge.
+   - Object: A tangible item, tool, device, or property.
+   - Organization: A company, institution, group, or formal entity.
+   - Document: Information content in various forms.
+                                """,
                             },
+                            "time": {
+                                "type": "string",
+                                "description": "The timestamp of relationship.",
+                            }
                         },
                         "required": [
                             "source",
                             "relationship",
                             "destination",
+                            "time",
                         ],
                         "additionalProperties": False,
                     },
