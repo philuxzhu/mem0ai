@@ -97,16 +97,7 @@ RELATIONS_TOOL = {
                         "properties": {
                             "source": {
                                 "type": "string",
-                                "description": f"""The source entity of the relationship.The extracted entities and their types include:
-   - User: The person in the current chat session.
-   - Preference: The user's expressed like, dislike, or preference for something.
-   - Location: The physical or virtual place where an activity occurs or an entity exists.
-   - Event: A time-bound activity, occurrence, or experience.
-   - Topic: The subject of conversation, interest, or field of knowledge.
-   - Object: A tangible item, tool, device, or property.
-   - Organization: A company, institution, group, or formal entity.
-   - Document: Information content in various forms.
-                                """
+                                "description": f"""The source entity of the relationship."""
                             },
                             "relationship": {
                                 "type": "string",
@@ -114,16 +105,7 @@ RELATIONS_TOOL = {
                             },
                             "destination": {
                                 "type": "string",
-                                "description": f"""The destination entity of the relationship.The extracted entities and their types include:
-   - User: The person in the current chat session.
-   - Preference: The user's expressed like, dislike, or preference for something.
-   - Location: The physical or virtual place where an activity occurs or an entity exists.
-   - Event: A time-bound activity, occurrence, or experience.
-   - Topic: The subject of conversation, interest, or field of knowledge.
-   - Object: A tangible item, tool, device, or property.
-   - Organization: A company, institution, group, or formal entity.
-   - Document: Information content in various forms.
-                                """,
+                                "description": f"""The destination entity of the relationship.""",
                             },
                             "time": {
                                 "type": "string",

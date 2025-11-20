@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime
 from dateutil.parser import parse
@@ -22,8 +23,9 @@ from mem0.graphs.tools import (
     RELATIONS_STRUCT_TOOL,
     RELATIONS_TOOL,
 )
-from mem0.graphs.utils import EXTRACT_NODES_PROMPT, EXTRACT_RELATIONS_PROMPT, get_delete_messages
+from mem0.graphs.utils import FACT_RETRIEVAL_PROMPT, EXTRACT_NODES_PROMPT, EXTRACT_RELATIONS_PROMPT, get_delete_messages
 from mem0.utils.factory import EmbedderFactory, LlmFactory
+from mem0.memory.utils import remove_code_blocks
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,7 @@ class MemoryGraph:
             data (str): The data to add to the graph.
             filters (dict): A dictionary containing filters to be applied during the addition.
         """
+        data = self._retrieve_facts(data, filters)
         entity_type_map = self._retrieve_nodes_from_data(data, filters)
         to_be_added = self._establish_nodes_relations_from_data(data, filters, entity_type_map)
         search_output = self._search_graph_db(node_list=list(entity_type_map.keys()), filters=filters)
@@ -296,6 +299,40 @@ class MemoryGraph:
         for node in results[0]['nodes']:
             node['properties'].pop('embedding', None)
         return results[0]
+
+    def _retrieve_facts(self, data, filters):
+        """Extracts all the facts mentioned in the query."""
+        content = f"Input:\n{data}"
+        response = self.llm.generate_response(
+            messages=[
+                {"role": "system", "content": FACT_RETRIEVAL_PROMPT},
+                {"role": "user", "content": content},
+            ],
+            response_format={"type": "json_object"},
+        )
+
+        try:
+            response = remove_code_blocks(response)
+            new_retrieved_facts = json.loads(response)["facts"]
+        except Exception as e:
+            logger.error(f"Error in new_retrieved_facts: {e}")
+            new_retrieved_facts = []
+
+        if not new_retrieved_facts:
+            logger.debug("No new facts retrieved from input. Skipping memory update LLM call.")
+            return None
+
+        logger.info(f"retrieved facts: {json.dumps(new_retrieved_facts, ensure_ascii=False)}")
+        result_string = ""
+        for fact in new_retrieved_facts:
+            if "username" not in fact or "fact" not in fact or "time" not in fact:
+                continue
+
+            fact_string = f"({fact.get('time')}){fact.get('username')}: {fact.get('fact')}"
+            result_string += fact_string + "\n"
+
+        return result_string
+
 
     def _retrieve_nodes_from_data(self, data, filters):
         """Extracts all the entities mentioned in the query."""
@@ -787,7 +824,8 @@ class MemoryGraph:
             if source == item.get("destination", "") or item.get("relationship", "")[0].isdigit():
                 continue
             # remove the relations that source is not the user or not exist before
-            if source not in users.keys():
+            source_user_id = self._get_w_user_id_by_name(source, filters)
+            if not source_user_id:
                 dest_embedding = self.embedding_model.embed(source)
                 destination_node_search_result = self._search_destination_node(dest_embedding, filters, threshold=0.9)
                 if not destination_node_search_result:
@@ -808,7 +846,7 @@ class MemoryGraph:
     def _get_w_user_id_by_name(self, name, filters):
         users = filters.get("users", {})
         for key in users.keys():
-            if name in key:
+            if name.lower() in key.lower():
                 return users.get(key)
         return ""
 
