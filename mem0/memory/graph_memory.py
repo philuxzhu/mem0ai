@@ -85,6 +85,8 @@ class MemoryGraph:
             filters (dict): A dictionary containing filters to be applied during the addition.
         """
         data = self._retrieve_facts(data, filters)
+        if not data:
+            return
         entity_type_map = self._retrieve_nodes_from_data(data, filters)
         to_be_added = self._establish_nodes_relations_from_data(data, filters, entity_type_map)
         search_output = self._search_graph_db(node_list=list(entity_type_map.keys()), filters=filters)
@@ -322,7 +324,7 @@ class MemoryGraph:
             logger.debug("No new facts retrieved from input. Skipping memory update LLM call.")
             return None
 
-        logger.info(f"retrieved facts: {json.dumps(new_retrieved_facts, ensure_ascii=False)}")
+        logger.info(f"retrieved facts: {json.dumps(new_retrieved_facts, ensure_ascii=False)}, content: {data}")
         result_string = ""
         for fact in new_retrieved_facts:
             if "username" not in fact or "fact" not in fact or "time" not in fact:
