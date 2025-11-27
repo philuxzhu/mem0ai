@@ -321,7 +321,7 @@ class MemoryGraph:
             new_retrieved_facts = []
 
         if not new_retrieved_facts:
-            logger.debug("No new facts retrieved from input. Skipping memory update LLM call.")
+            logger.debug(f"No new facts retrieved from input. content: {data}")
             return None
 
         logger.info(f"retrieved facts: {json.dumps(new_retrieved_facts, ensure_ascii=False)}, content: {data}")
@@ -591,11 +591,11 @@ class MemoryGraph:
 
             # types
             source_user_id = self._get_w_user_id_by_name(source, filters)
-            source_type = entity_type_map.get(source, "__User__")
+            source_type = "person" if source_user_id else entity_type_map.get(source, "__User__")
             source_label = self.node_label if self.node_label else f":`{source_type}`"
             source_extra_set = f", source:`{source_type}`" if self.node_label else ""
             destination_user_id = self._get_w_user_id_by_name(destination, filters)
-            destination_type = entity_type_map.get(destination, "__User__")
+            destination_type = "person" if destination_user_id else entity_type_map.get(destination, "__User__")
             destination_label = self.node_label if self.node_label else f":`{destination_type}`"
             destination_extra_set = f", destination:`{destination_type}`" if self.node_label else ""
 
@@ -822,8 +822,10 @@ class MemoryGraph:
         users = filters.get("users", {})
         for item in entity_list:
             source = item.get("source", "")
-            # remove the relations that source equals destination or relationship that first character is digit
-            if source == item.get("destination", "") or item.get("relationship", "")[0].isdigit():
+            destination = item.get("destination", "")
+            # remove the relations that source equals destination or length of destination bigger then 10
+            # or relationship that first character is digit
+            if source == destination or len(destination) > 10 or item.get("relationship", "")[0].isdigit():
                 continue
             # remove the relations that source is not the user or not exist before
             source_user_id = self._get_w_user_id_by_name(source, filters)
@@ -833,7 +835,6 @@ class MemoryGraph:
                 if not destination_node_search_result:
                     continue
             valid_relations.append(item)
-
         return valid_relations
 
     def _datetime_to_timestmap(self, time):

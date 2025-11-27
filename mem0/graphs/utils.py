@@ -35,28 +35,27 @@ Output:
 Provide a list of update instructions, each specifying the source, target, and the new relationship to be set. Only include memories that require updates.
 """
 
-FACT_RETRIEVAL_PROMPT = f"""You are an expert in user portrait, particularly skilled in extracting user portrait information from chat content. Your task is to extract user portrait information from the chat content.
+FACT_RETRIEVAL_PROMPT = f"""You are an expert in facts, particularly skilled in extracting fact informations from chat content. Your task is to extract fact informations from the chat content.
 
-# The types of user portrait information to be extracted include:
+# The types of fact informations to be extracted include:
 1. Basic information, such as name, gender, birth date, zodiac sign, occupation.
 2. Interests and hobbies, the user's likes and dislikes, especially in categories such as food, products, entertainment, and sports.
 3. Social relationships, such as friendships, families, schoolmates, colleagues.
-4. Important milestones, progress, and key matters in work, life, and study.
-
+4. Content related to AI, finance, health, military, education, entertainment, etc.
 
 # Remember the following rules:
 1. Today's date is {datetime.now().strftime("%Y-%m-%d")}.
-2. Only return the three types of user portrait information mentioned above, do not output other types of information.
+2. Only return the types of fact informations mentioned above, do not output other types of information.
 3. If you do not find anything relevant in the below conversation, you can return an empty list corresponding to the "facts" key.
-4. Create the user portraits based on the user chat content only. Do not pick anything from the system messages.
-5. You should detect the language of the user input and record the user portraits in the same language.
+4. Create the facts based on the user chat content only. Do not pick anything from the system messages.
+5. You should detect the language of the user input and record the facts in the same language.
 6. Output your response strictly in the following JSON structure:
 {{
     "facts": [
         {{
             "username": "",        // The username of the individual，must be exactly the same as the username in the input, even if the username in the input contains emojis.
-            "fact": "",            // The extracted user portrait of the user, such as name, gender, birth date, zodiac sign, occupation, interests and hobbies, friendships, families, schoolmates, colleagues, and so on.
-            "time": "",            // The time of the conversation which contains user portraits
+            "fact": "",            // The extracted facts of the user, such as name, gender, birth date, zodiac sign, occupation, interests and hobbies, friendships, families, schoolmates, colleagues, and so on.
+            "time": "",            // The time of the conversation which contains fact
         }},
         ...
     ]
@@ -163,33 +162,29 @@ You are a smart assistant who understands entities and their types in a given te
 """
 
 EXTRACT_RELATIONS_PROMPT = f"""
+你是一个先进的算法，旨在从文本中提取结构化信息以构建知识图谱。你的目标是捕获全面且准确的信息。请遵循以下关键原则：
+1. 只提取文本中明确陈述的信息。
+2. 建立所提供实体之间的关系。
+3. 消息格式如下：(消息时间)发送者名称: 消息内容。
 
-You are an advanced algorithm designed to extract structured information from text to construct knowledge graphs. Your goal is to capture comprehensive and accurate information. Follow these key principles:
+关系：
+- 表示实体之间的关系，例如“Kendra 喜欢 Adidas 鞋子”中的“喜欢”。
+- 使用一致、通用且具有时效性的关系类型。
+- 关系仅应在用户消息中明确提及的实体之间建立。
 
-1. Extract only explicitly stated information from the text.
-2. Establish relationships among the entities provided.
-3. The format of the messages is as follows: (message Time)sender's name: message content.
-CUSTOM_PROMPT
+实体一致性：
+- 确保关系具有连贯性，并在消息上下文中逻辑一致。
+- 在提取的数据中保持实体命名的一致性。
+- 提取的实体应尽可能简洁，中文不超过5个字符，英文不超过5个单词。
+- 如果实体为日期（如“明天”、“星期二”等），请将其转换为yyyy-mm-dd格式的日期。今天的日期是 {datetime.now().strftime("%Y-%m-%d")}。
 
-Relationships:
-    - Represents the relationship between entities, for example, "loves" in "Kendra loves Adidas shoes".
-    - Use consistent, general, and timeless relationship types.
-    - Relationships should only be established among the entities explicitly mentioned in the user message.
+关系时间：
+- 关系的时间为消息时间。
 
-Entity Consistency:
-    - Ensure that relationships are coherent and logically align with the context of the message.
-    - Maintain consistent naming for entities across the extracted data.
-    - The extracted entities should be as concise as possible, within 5 characters (in Chinese) or 5 words (in English).
-    - If the entity is a date (such as "tomorrow", "Tuesday" etc.), convert it to a date in the yyyy-mm-dd format. Today's date is {datetime.now().strftime("%Y-%m-%d")}.
-
-Relationship time:
-    - The time of relationship from message.
-
-Strive to construct a coherent and easily understandable knowledge graph by establishing all the relationships among the entities and adherence to the user’s context.
-
-Adhere strictly to these guidelines to ensure high-quality knowledge graph ext raction.
-
-You should detect the language of the user input and make sure the extracted source、relationship and destination be in the same language."""
+通过建立所有实体之间的关系，并严格遵循用户的上下文，努力构建一个连贯且易于理解的知识图谱。
+严格遵守这些准则，以确保高质量的知识图谱抽取。
+你应检测用户输入的语言，并确保提取的source、relationship和destination使用相同的语言。
+"""
 
 DELETE_RELATIONS_SYSTEM_PROMPT = """
 You are a graph memory manager specializing in identifying, managing, and optimizing relationships within graph-based memories. Your primary task is to analyze a list of existing relationships and determine which ones should be deleted based on the new information provided.
